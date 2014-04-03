@@ -4300,4 +4300,8 @@ pub mod funcs {
     }
 }
 
+#[doc(hidden)]
+#[no_split_stack]
+pub fn attempt() {}
+
 #[test] fn work_on_windows() { } // FIXME #10872 needed for a happy windows
