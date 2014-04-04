@@ -1127,6 +1127,7 @@ fn link_args(sess: &Session,
         // DWARF stack unwinding will not work.
         // This behavior may be overridden by --link-args "-static-libgcc"
         args.push(~"-shared-libgcc");
+        args.push(~"-Wl,--enable-long-section-names");
     }
 
     if sess.targ_cfg.os == abi::OsAndroid {
