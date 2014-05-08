@@ -1175,20 +1175,25 @@ struct CheckTypeForPrivatenessVisitor<'a, 'b> {
 }
 
 impl<'a> VisiblePrivateTypesVisitor<'a> {
-    fn path_is_private_type(&self, path_id: ast::NodeId) -> bool {
+    fn path_is_private_type(&self, path_id: ast::NodeId) -> Option<ast::DefId> {
         let did = match self.tcx.def_map.borrow().find_copy(&path_id) {
             // `int` etc. (None doesn't seem to occur.)
-            None | Some(ast::DefPrimTy(..)) => return false,
+            None | Some(ast::DefPrimTy(..)) => return None,
             Some(def) => def_id_of_def(def)
         };
         // A path can only be private if:
         // it's in this crate...
-        is_local(did) &&
-            // ... it's not exported (obviously) ...
-            !self.exported_items.contains(&did.node) &&
-            // .. and it corresponds to a type in the AST (this returns None for
-            // type parameters)
-            self.tcx.map.find(did.node).is_some()
+        if is_local(did) &&
+                // ... it's not exported (obviously) ...
+                !self.exported_items.contains(&did.node) &&
+                // .. and it corresponds to a type in the AST (this returns None for
+                // type parameters)
+                self.tcx.map.find(did.node).is_some() {
+            Some(did)
+        }
+        else {
+            None
+        }
     }
 
     fn trait_is_public(&self, trait_id: ast::NodeId) -> bool {
@@ -1202,7 +1207,7 @@ impl<'a, 'b> Visitor<()> for CheckTypeForPrivatenessVisitor<'a, 'b> {
     fn visit_ty(&mut self, ty: &ast::Ty, _: ()) {
         match ty.node {
             ast::TyPath(_, _, path_id) => {
-                if self.inner.path_is_private_type(path_id) {
+                if self.inner.path_is_private_type(path_id).is_some() {
                     self.contains_private = true;
                     // found what we're looking for so let's stop
                     // working.
@@ -1363,10 +1368,15 @@ impl<'a> Visitor<()> for VisiblePrivateTypesVisitor<'a> {
     fn visit_ty(&mut self, t: &ast::Ty, _: ()) {
         match t.node {
             ast::TyPath(ref p, _, path_id) => {
-                if self.path_is_private_type(path_id) {
-                    self.tcx.sess.add_lint(lint::VisiblePrivateTypes,
-                                           path_id, p.span,
-                                           "private type in exported type signature".to_owned());
+                match self.path_is_private_type(path_id) {
+                    Some(did) => {
+                        let priv_name = self.tcx.map.node_to_str(did.node);
+                        self.tcx.sess.add_lint(lint::VisiblePrivateTypes,
+                                               path_id, p.span,
+                                               "private type in exported type signature: "
+                                               .to_owned().append(priv_name));
+                    },
+                    _ => {}
                 }
             }
             _ => {}
